@@ -204,9 +204,7 @@ class QuestionGenerator {
         terms.add(definition.term);
       }
     }
-    return terms
-        .where((term) => term.trim().length >= 3)
-        .toList(growable: false);
+    return terms.where(_isStrongTerm).toList(growable: false);
   }
 
   Iterable<Question> _candidatesForSentence({
@@ -276,12 +274,11 @@ class QuestionGenerator {
       }
     }
 
-    final phrases = _extractKeyPhrases(sentence, includeLeading: false);
+    final phrases = _extractKeyPhrases(sentence, includeLeading: false)
+        .where(_isStrongTerm)
+        .toList();
     phrases.sort((a, b) => b.length.compareTo(a.length));
     for (final phrase in phrases.take(2)) {
-      if (phrase.length < 4) {
-        continue;
-      }
       final cloze = _replaceOnce(sentence, phrase, '_____');
       if (cloze == sentence) {
         continue;
@@ -314,7 +311,9 @@ class QuestionGenerator {
     final uniqueDistractors = <String>[];
     for (final candidate in [...distractorPool, ...extraDistractors]) {
       final cleaned = candidate.trim();
-      if (cleaned.isEmpty || _equalsIgnoreCase(cleaned, answer)) {
+      if (cleaned.isEmpty ||
+          _equalsIgnoreCase(cleaned, answer) ||
+          !_isStrongTerm(cleaned)) {
         continue;
       }
       if (uniqueDistractors.any((item) => _equalsIgnoreCase(item, cleaned))) {
@@ -426,16 +425,88 @@ class QuestionGenerator {
     }
 
     for (final word in words) {
-      if (RegExp(r'^\d+(?:\.\d+)?%?$').hasMatch(word) ||
-          (word.length >= 6 &&
-              !_stopwords.contains(word.toLowerCase()) &&
-              !word.contains('-') &&
-              word == word.toLowerCase())) {
+      if (RegExp(r'^\d+(?:\.\d+)?%?$').hasMatch(word) || _isStrongTerm(word)) {
         phrases.add(word);
       }
     }
 
     return phrases.toList();
+  }
+
+  bool _isStrongTerm(String term) {
+    final cleaned = term.trim();
+    if (cleaned.length < 4) {
+      return false;
+    }
+    if (cleaned.split(RegExp(r'\s+')).length >= 4) {
+      return true;
+    }
+    if (_stopwords.contains(cleaned.toLowerCase())) {
+      return false;
+    }
+    if (RegExp(r'^(and|or|of|the|a|an)\b', caseSensitive: false).hasMatch(cleaned) ||
+        RegExp(r'\b(and|or|of|the|a|an)$', caseSensitive: false).hasMatch(cleaned)) {
+      return false;
+    }
+    if (RegExp(r'^\d').hasMatch(cleaned) || cleaned.contains(RegExp(r'[A-Z]'))) {
+      return true;
+    }
+    final lower = cleaned.toLowerCase();
+    const weak = {
+      'occurs',
+      'happens',
+      'produces',
+      'increases',
+      'becomes',
+      'demonstrated',
+      'restore',
+      'released',
+      'absorbs',
+      'another',
+      'overall',
+      'chemical',
+      'process',
+      'convert',
+      'energy',
+      'factor',
+      'reduce',
+      'adapted',
+      'essential',
+      'breathing',
+      'animals',
+      'source',
+      'allow',
+      'enter',
+      'until',
+      'affect',
+      'open',
+      'night',
+      'tiny',
+      'pores',
+      'leaves',
+      'sugar',
+      'plants',
+      'plant',
+      'cells',
+      'green',
+      'light',
+      'water',
+      'using',
+      'called',
+      'known',
+      'takes',
+      'place',
+      'mainly',
+      'during',
+    };
+    if (weak.contains(lower)) {
+      return false;
+    }
+    return cleaned.length >= 8 ||
+        RegExp(
+          r'(tion|sion|sis|phyll|plast|sphere|oxide|cycle|brane|thesis|unit|belt|planet|chlor|photo|stomata|glucose|oxygen|carbon)',
+          caseSensitive: false,
+        ).hasMatch(cleaned);
   }
 
   bool _isProperStart(String word) {
